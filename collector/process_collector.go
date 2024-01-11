@@ -276,6 +276,8 @@ func (p *NamedProcessCollector) scrape(ch chan<- prometheus.Metric) {
 				prometheus.CounterValue, gcounts.CPUUserTime, gname, "user")
 			ch <- prometheus.MustNewConstMetric(cpuSecsDesc,
 				prometheus.CounterValue, gcounts.CPUSystemTime, gname, "system")
+			ch <- prometheus.MustNewConstMetric(cpuSecsDesc,
+				prometheus.CounterValue, gcounts.CPUTime, gname, "total")
 			ch <- prometheus.MustNewConstMetric(readBytesDesc,
 				prometheus.CounterValue, float64(gcounts.ReadBytes), gname)
 			ch <- prometheus.MustNewConstMetric(writeBytesDesc,

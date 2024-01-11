@@ -40,6 +40,7 @@ type (
 	Counts struct {
 		CPUUserTime           float64
 		CPUSystemTime         float64
+		CPUTime               float64
 		ReadBytes             uint64
 		WriteBytes            uint64
 		MajorPageFaults       uint64
@@ -134,6 +135,7 @@ type (
 		procfs.Proc
 		procid  *ID
 		stat    *procfs.ProcStat
+		cputime *float64
 		status  *procfs.ProcStatus
 		cmdline []string
 		cgroups []procfs.Cgroup
@@ -206,6 +208,7 @@ func (ii IDInfo) String() string {
 func (c *Counts) Add(c2 Delta) {
 	c.CPUUserTime += c2.CPUUserTime
 	c.CPUSystemTime += c2.CPUSystemTime
+	c.CPUTime += c2.CPUTime
 	c.ReadBytes += c2.ReadBytes
 	c.WriteBytes += c2.WriteBytes
 	c.MajorPageFaults += c2.MajorPageFaults
@@ -218,6 +221,7 @@ func (c *Counts) Add(c2 Delta) {
 func (c Counts) Sub(c2 Counts) Delta {
 	c.CPUUserTime -= c2.CPUUserTime
 	c.CPUSystemTime -= c2.CPUSystemTime
+	c.CPUTime -= c2.CPUTime
 	c.ReadBytes -= c2.ReadBytes
 	c.WriteBytes -= c2.WriteBytes
 	c.MajorPageFaults -= c2.MajorPageFaults
@@ -409,12 +413,28 @@ func (p *proccache) GetStatic() (Static, error) {
 	}, nil
 }
 
+func (p *proccache) getCpuTime() (float64, error) {
+	if p.cputime == nil {
+		stat, err := procfs.NewStat()
+		if err != nil {
+			return 0, err
+		}
+		p.cputime = new(float64)
+		*p.cputime = (stat.CPUTotal.User + stat.CPUTotal.Nice + stat.CPUTotal.System + stat.CPUTotal.Idle + stat.CPUTotal.Iowait + stat.CPUTotal.IRQ + stat.CPUTotal.SoftIRQ) / float64(len(stat.CPU))
+	}
+	return *p.cputime, nil
+}
+
 func (p proc) GetCounts() (Counts, int, error) {
 	stat, err := p.getStat()
 	if err != nil {
 		if err == os.ErrNotExist {
 			err = ErrProcNotExist
 		}
+		return Counts{}, 0, fmt.Errorf("error reading stat file: %v", err)
+	}
+	cpuTime, err := p.getCpuTime()
+	if err != nil {
 		return Counts{}, 0, fmt.Errorf("error reading stat file: %v", err)
 	}
 
@@ -434,6 +454,7 @@ func (p proc) GetCounts() (Counts, int, error) {
 	return Counts{
 		CPUUserTime:           float64(stat.UTime) / userHZ,
 		CPUSystemTime:         float64(stat.STime) / userHZ,
+		CPUTime:               cpuTime,
 		ReadBytes:             io.ReadBytes,
 		WriteBytes:            io.WriteBytes,
 		MajorPageFaults:       uint64(stat.MajFlt),
